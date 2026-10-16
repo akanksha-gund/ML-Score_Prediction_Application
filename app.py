@@ -1,133 +1,146 @@
+import os
 import pickle
 import numpy as np
-import pandas as pd
-import streamlit as st
+from flask import Flask, render_template_string, request
 
-# Page Configuration
-st.set_page_config(
-    page_title='K-NN Regressor Deployment', page_icon='📊', layout='centered'
-)
+app = Flask(__name__)
 
-
-# Load the trained model safely
-@st.cache_resource
-def load_model():
-  with open('knn.pkl', 'rb') as file:
-    model = pickle.load(file)
-  return model
-
-
+# Load the trained KNN model
+MODEL_PATH = "knn.pkl"
 try:
-  model = load_model()
+    with open(MODEL_PATH, "rb") as f:
+        model = pickle.load(f)
 except Exception as e:
-  st.error(
-      f'Error loading `knn.pkl`. Please ensure the file is in the correct'
-      f' directory. Details: {e}'
-  )
-  st.stop()
+    print(f"Error loading model: {e}")
+    model = None
 
-st.title('🎓 Student Performance Prediction App')
-st.write(
-    'Provide the student details below to get a prediction using your trained'
-    ' **KNeighborsRegressor** model.'
-)
+# Attractive HTML layout with Tailwind CSS embedded inside app.py
+HTML_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KNN Regressor Prediction Portal</title>
+    <!-- Tailwind CSS CDN for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-slate-100 min-h-screen flex items-center justify-center p-4">
+    <div class="max-w-2xl w-full bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-2xl shadow-2xl overflow-hidden p-8">
+        
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <h1 class="text-3xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-indigo-400">
+                KNN Regressor Dashboard
+            </h1>
+            <p class="text-slate-400 text-sm mt-2">Enter student parameters below to estimate performance metrics.</p>
+        </div>
 
-st.divider()
+        <!-- Prediction Result Card (Conditional) -->
+        {% if prediction is not none %}
+        <div class="mb-8 p-5 bg-indigo-950/60 border border-indigo-500/30 rounded-xl text-center animate-pulse">
+            <span class="text-xs uppercase tracking-widest text-indigo-300 font-semibold">Predicted Outcome</span>
+            <div class="text-3xl font-black text-cyan-400 mt-1">{{ prediction }}</div>
+        </div>
+        {% endif %}
 
-# Input Form Layout
-with st.form('prediction_form'):
-  st.subheader('Enter Student Parameters')
+        <!-- Input Form -->
+        <form method="POST" class="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div>
+                <label class="block text-xs font-medium text-slate-300 uppercase mb-1">Age</label>
+                <input type="number" step="any" name="age" required class="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-indigo-500 transition">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-slate-300 uppercase mb-1">Gender (Encoded/Numeric)</label>
+                <input type="number" step="any" name="gender" required class="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-indigo-500 transition">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-slate-300 uppercase mb-1">Course (Encoded/Numeric)</label>
+                <input type="number" step="any" name="course" required class="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-indigo-500 transition">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-slate-300 uppercase mb-1">Study Hours</label>
+                <input type="number" step="any" name="study_hours" required class="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-indigo-500 transition">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-slate-300 uppercase mb-1">Class Attendance</label>
+                <input type="number" step="any" name="class_attendance" required class="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-indigo-500 transition">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-slate-300 uppercase mb-1">Internet Access</label>
+                <input type="number" step="any" name="internet_access" required class="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-indigo-500 transition">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-slate-300 uppercase mb-1">Sleep Hours</label>
+                <input type="number" step="any" name="sleep_hours" required class="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-indigo-500 transition">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-slate-300 uppercase mb-1">Sleep Quality</label>
+                <input type="number" step="any" name="sleep_quality" required class="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-indigo-500 transition">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-slate-300 uppercase mb-1">Study Method</label>
+                <input type="number" step="any" name="study_method" required class="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-indigo-500 transition">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-slate-300 uppercase mb-1">Facility Rating</label>
+                <input type="number" step="any" name="facility_rating" required class="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-indigo-500 transition">
+            </div>
+            <div class="md:col-span-2">
+                <label class="block text-xs font-medium text-slate-300 uppercase mb-1">Exam Difficulty</label>
+                <input type="number" step="any" name="exam_difficulty" required class="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-indigo-500 transition">
+            </div>
 
-  col1, col2 = st.columns(2)
+            <!-- Submit Button -->
+            <div class="md:col-span-2 mt-4">
+                <button type="submit" class="w-full bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-semibold py-3 px-6 rounded-lg shadow-lg transition transform active:scale-[0.99]">
+                    Run Prediction
+                </button>
+            </div>
+        </form>
 
-  with col1:
-    age = st.number_input('Age[cite: 1]', min_value=10, max_value=100, value=20)
-    gender = st.sidebar if False else st.selectbox(
-        'Gender[cite: 1]', ['Male', 'Female', 'Other']
-    )
-    course = st.selectbox(
-        'Course[cite: 1]', ['Science', 'Commerce', 'Arts', 'Engineering', 'Other']
-    )
-    study_hours = st.number_input(
-        'Study Hours[cite: 1]', min_value=0.0, max_value=24.0, value=4.0
-    )
-    class_attendance = st.slider(
-        'Class Attendance (%)[cite: 1]', min_value=0, max_value=100, value=75
-    )
-    internet_access = st.selectbox(
-        'Internet Access[cite: 1]', ['Yes', 'No']
-    )
+        <div class="mt-8 text-center text-xs text-slate-500">
+            Powered by Flask & Scikit-Learn • Deployed on Render
+        </div>
+    </div>
+</body>
+</html>
+"""
 
-  with col2:
-    sleep_hours = st.number_input(
-        'Sleep Hours[cite: 1]', min_value=0.0, max_value=16.0, value=7.0
-    )
-    sleep_quality = st.selectbox(
-        'Sleep Quality[cite: 1]', ['Poor', 'Average', 'Good']
-    )
-    study_method = st.selectbox(
-        'Study Method[cite: 1]',
-        ['Self-Study', 'Group Study', 'Online', 'Offline Classes'],
-    )
-    facility_rating = st.slider(
-        'Facility Rating (1-5)[cite: 1]', min_value=1, max_value=5, value=3
-    )
-    exam_difficulty = st.selectbox(
-        'Exam Difficulty[cite: 1]', ['Easy', 'Medium', 'Hard']
-    )
 
-  submit_button = st.form_submit_button(
-      label='Predict', use_container_width=True
-)
+@app.route("/", methods=["GET", "POST"])
+def index():
+  prediction = None
+  if request.method == "POST":
+    try:
+      # Extract fields matching your model features order
+      features = [
+          float(request.form["age"]),
+          float(request.form["gender"]),
+          float(request.form["course"]),
+          float(request.form["study_hours"]),
+          float(request.form["class_attendance"]),
+          float(request.form["internet_access"]),
+          float(request.form["sleep_hours"]),
+          float(request.form["sleep_quality"]),
+          float(request.form["study_method"]),
+          float(request.form["facility_rating"]),
+          float(request.form["exam_difficulty"]),
+      ]
 
-if submit_button:
-  # Map categorical features to numeric values
-  # Note: Adjust these mappings if your training script used different numeric labels
-  gender_map = {'Male': 0, 'Female': 1, 'Other': 2}
-  internet_map = {'No': 0, 'Yes': 1}
-  sleep_quality_map = {'Poor': 0, 'Average': 1, 'Good': 2}
-  exam_diff_map = {'Easy': 0, 'Medium': 1, 'Hard': 2}
+      if model:
+        # Reshape to 2D array for prediction
+        input_data = np.array([features])
+        pred = model.predict(input_data)
+        prediction = round(float(pred[0]), 4)
+      else:
+        prediction = "Model not loaded successfully."
+    except Exception as e:
+      prediction = f"Error in processing input: {e}"
 
-  # Construct input array matching the model's feature layout[cite: 1]
-  # Ensure the order of columns strictly matches your training dataset columns:
-  # age, gender, course, study_hours, class_attendance, internet_access, sleep_hours, sleep_quality, study_method, facility_rating, exam_difficulty[cite: 1]
+  return render_template_string(HTML_TEMPLATE, prediction=prediction)
 
-  # For demonstration, simple numeric placeholders/hashes are used for text-heavy columns like 'course' and 'study_method'
-  # If your model used OneHotEncoding, you must transform the input accordingly.
-  input_data = pd.DataFrame(
-      [[
-          age,
-          gender_map.get(gender, 0),
-          hash(course) % 10,
-          study_hours,
-          class_attendance,
-          internet_map.get(internet_access, 0),
-          sleep_hours,
-          sleep_quality_map.get(sleep_quality, 1),
-          hash(study_method) % 10,
-          facility_rating,
-          exam_diff_map.get(exam_difficulty, 1),
-      ]],
-      columns=[
-          'age',
-          'gender',
-          'course',
-          'study_hours',
-          'class_attendance',
-          'internet_access',
-          'sleep_hours',
-          'sleep_quality',
-          'study_method',
-          'facility_rating',
-          'exam_difficulty',
-      ],
-  )
 
-  try:
-    prediction = model.predict(input_data)
-    st.success(f'### Predicted Output: {prediction[0]:.2f}')
-  except Exception as err:
-    st.error(
-        'Prediction failed. Please ensure your input data encoding matches'
-        f' the format expected by the model. Details: {err}'
-    )
+if __name__ == "__main__":
+  port = int(os.environ.get("PORT", 5000))
+  app.run(host="0.0.0.0", port=port)
