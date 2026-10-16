@@ -1,146 +1,184 @@
-import os
 import pickle
 import numpy as np
-from flask import Flask, render_template_string, request
+import streamlit as st
 
-app = Flask(__name__)
+# Page configuration
+st.set_page_config(
+    page_title="Student Performance Predictor", page_icon="🎓", layout="centered"
+)
+
+# Custom CSS for gorgeous aesthetic styling, glassmorphism, and gradients
+st.markdown(
+    """
+    <style>
+    .main {
+        background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+        color: #f8fafc;
+    }
+    .stApp {
+        background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+    }
+    .banner-container {
+        position: relative;
+        border-radius: 16px;
+        overflow: hidden;
+        margin-bottom: 25px;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+    }
+    .banner-img {
+        width: 100%;
+        height: 200px;
+        object-fit: cover;
+        opacity: 0.65;
+        filter: brightness(0.9);
+    }
+    .banner-text {
+        position: absolute;
+        bottom: 20px;
+        left: 20px;
+        right: 20px;
+    }
+    .banner-title {
+        font-size: 28px;
+        font-weight: 800;
+        color: #ffffff;
+        margin: 0;
+        text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+    }
+    .banner-subtitle {
+        font-size: 14px;
+        color: #cbd5e1;
+        margin-top: 4px;
+    }
+    /* Style form buttons and containers */
+    .stButton>button {
+        width: 100%;
+        background: linear-gradient(90deg, #06b6d4 0%, #6366f1 100%);
+        color: white;
+        font-weight: 600;
+        border: none;
+        padding: 0.75rem;
+        border-radius: 0.5rem;
+        box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.4);
+        transition: all 0.3s ease;
+    }
+    .stButton>button:hover {
+        opacity: 0.9;
+        transform: translateY(-1px);
+    }
+    </style>
+""",
+    unsafe_allow_html=True,
+)
 
 # Load the trained KNN model
 MODEL_PATH = "knn.pkl"
-try:
+
+
+@st.cache_resource
+def load_model():
+  try:
     with open(MODEL_PATH, "rb") as f:
-        model = pickle.load(f)
-except Exception as e:
-    print(f"Error loading model: {e}")
-    model = None
+      return pickle.load(f)
+  except Exception as e:
+    return None
 
-# Attractive HTML layout with Tailwind CSS embedded inside app.py
-HTML_TEMPLATE = """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KNN Regressor Prediction Portal</title>
-    <!-- Tailwind CSS CDN for styling -->
-    <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-slate-100 min-h-screen flex items-center justify-center p-4">
-    <div class="max-w-2xl w-full bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-2xl shadow-2xl overflow-hidden p-8">
-        
-        <!-- Header -->
-        <div class="text-center mb-8">
-            <h1 class="text-3xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-indigo-400">
-                KNN Regressor Dashboard
-            </h1>
-            <p class="text-slate-400 text-sm mt-2">Enter student parameters below to estimate performance metrics.</p>
-        </div>
 
-        <!-- Prediction Result Card (Conditional) -->
-        {% if prediction is not none %}
-        <div class="mb-8 p-5 bg-indigo-950/60 border border-indigo-500/30 rounded-xl text-center animate-pulse">
-            <span class="text-xs uppercase tracking-widest text-indigo-300 font-semibold">Predicted Outcome</span>
-            <div class="text-3xl font-black text-cyan-400 mt-1">{{ prediction }}</div>
-        </div>
-        {% endif %}
+model = load_model()
 
-        <!-- Input Form -->
-        <form method="POST" class="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div>
-                <label class="block text-xs font-medium text-slate-300 uppercase mb-1">Age</label>
-                <input type="number" step="any" name="age" required class="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-indigo-500 transition">
-            </div>
-            <div>
-                <label class="block text-xs font-medium text-slate-300 uppercase mb-1">Gender (Encoded/Numeric)</label>
-                <input type="number" step="any" name="gender" required class="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-indigo-500 transition">
-            </div>
-            <div>
-                <label class="block text-xs font-medium text-slate-300 uppercase mb-1">Course (Encoded/Numeric)</label>
-                <input type="number" step="any" name="course" required class="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-indigo-500 transition">
-            </div>
-            <div>
-                <label class="block text-xs font-medium text-slate-300 uppercase mb-1">Study Hours</label>
-                <input type="number" step="any" name="study_hours" required class="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-indigo-500 transition">
-            </div>
-            <div>
-                <label class="block text-xs font-medium text-slate-300 uppercase mb-1">Class Attendance</label>
-                <input type="number" step="any" name="class_attendance" required class="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-indigo-500 transition">
-            </div>
-            <div>
-                <label class="block text-xs font-medium text-slate-300 uppercase mb-1">Internet Access</label>
-                <input type="number" step="any" name="internet_access" required class="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-indigo-500 transition">
-            </div>
-            <div>
-                <label class="block text-xs font-medium text-slate-300 uppercase mb-1">Sleep Hours</label>
-                <input type="number" step="any" name="sleep_hours" required class="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-indigo-500 transition">
-            </div>
-            <div>
-                <label class="block text-xs font-medium text-slate-300 uppercase mb-1">Sleep Quality</label>
-                <input type="number" step="any" name="sleep_quality" required class="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-indigo-500 transition">
-            </div>
-            <div>
-                <label class="block text-xs font-medium text-slate-300 uppercase mb-1">Study Method</label>
-                <input type="number" step="any" name="study_method" required class="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-indigo-500 transition">
-            </div>
-            <div>
-                <label class="block text-xs font-medium text-slate-300 uppercase mb-1">Facility Rating</label>
-                <input type="number" step="any" name="facility_rating" required class="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-indigo-500 transition">
-            </div>
-            <div class="md:col-span-2">
-                <label class="block text-xs font-medium text-slate-300 uppercase mb-1">Exam Difficulty</label>
-                <input type="number" step="any" name="exam_difficulty" required class="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:border-indigo-500 transition">
-            </div>
-
-            <!-- Submit Button -->
-            <div class="md:col-span-2 mt-4">
-                <button type="submit" class="w-full bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-semibold py-3 px-6 rounded-lg shadow-lg transition transform active:scale-[0.99]">
-                    Run Prediction
-                </button>
-            </div>
-        </form>
-
-        <div class="mt-8 text-center text-xs text-slate-500">
-            Powered by Flask & Scikit-Learn • Deployed on Render
+# Aesthetic Banner with Topic-Related Image
+st.markdown(
+    """
+    <div class="banner-container">
+        <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1200&q=80" class="banner-img">
+        <div class="banner-text">
+            <h1 class="banner-title">🎓 Student Performance Predictor</h1>
+            <p class="banner-subtitle">Advanced Machine Learning Model Powered by K-Nearest Neighbors (KNN)</p>
         </div>
     </div>
-</body>
-</html>
-"""
+""",
+    unsafe_allow_html=True,
+)
 
+# Input Form inside Streamlit
+with st.form("prediction_form"):
+  st.markdown("### 📊 Enter Student Parameters")
+  st.markdown(
+      "Please fill in the details below to estimate the academic performance"
+      " outcome."
+  )
 
-@app.route("/", methods=["GET", "POST"])
-def index():
-  prediction = None
-  if request.method == "POST":
-    try:
-      # Extract fields matching your model features order
-      features = [
-          float(request.form["age"]),
-          float(request.form["gender"]),
-          float(request.form["course"]),
-          float(request.form["study_hours"]),
-          float(request.form["class_attendance"]),
-          float(request.form["internet_access"]),
-          float(request.form["sleep_hours"]),
-          float(request.form["sleep_quality"]),
-          float(request.form["study_method"]),
-          float(request.form["facility_rating"]),
-          float(request.form["exam_difficulty"]),
-      ]
+  col1, col2 = st.columns(2)
 
-      if model:
-        # Reshape to 2D array for prediction
-        input_data = np.array([features])
-        pred = model.predict(input_data)
-        prediction = round(float(pred[0]), 4)
-      else:
-        prediction = "Model not loaded successfully."
-    except Exception as e:
-      prediction = f"Error in processing input: {e}"
+  with col1:
+    age = st.number_input("Age", value=18.0, step=1.0)
+    gender = st.number_input("Gender (Encoded/Numeric)", value=0.0, step=1.0)
+    course = st.number_input("Course (Encoded/Numeric)", value=0.0, step=1.0)
+    study_hours = st.number_input("Study Hours", value=5.0, step=0.5)
+    class_attendance = st.number_input("Class Attendance (%)", value=85.0, step=1.0)
+    internet_access = st.number_input(
+        "Internet Access (0 or 1)", value=1.0, step=1.0
+    )
 
-  return render_template_string(HTML_TEMPLATE, prediction=prediction)
+  with col2:
+    sleep_hours = st.number_input("Sleep Hours", value=7.0, step=0.5)
+    sleep_quality = st.number_input("Sleep Quality (1-5)", value=3.0, step=1.0)
+    study_method = st.number_input("Study Method (Encoded)", value=1.0, step=1.0)
+    facility_rating = st.number_input(
+        "Facility Rating (1-5)", value=4.0, step=1.0
+    )
+    exam_difficulty = st.number_input(
+        "Exam Difficulty (1-5)", value=3.0, step=1.0
+    )
 
+  st.markdown("<br>", unsafe_allow_html=True)
+  submitted = st.form_submit_button("🚀 Run Prediction")
 
-if __name__ == "__main__":
-  port = int(os.environ.get("PORT", 5000))
-  app.run(host="0.0.0.0", port=port)
+if submitted:
+  try:
+    features = [
+        age,
+        gender,
+        course,
+        study_hours,
+        class_attendance,
+        internet_access,
+        sleep_hours,
+        sleep_quality,
+        study_method,
+        facility_rating,
+        exam_difficulty,
+    ]
+
+    if model:
+      input_data = np.array([features])
+      pred = model.predict(input_data)
+      prediction = round(float(pred[0]), 4)
+
+      # Gorgeous Result Card
+      st.markdown(
+          f"""
+            <div style="padding: 20px; background: rgba(99, 102, 241, 0.15); border: 1px solid rgba(99, 102, 241, 0.4); border-radius: 12px; text-align: center; margin-top: 20px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3);">
+                <span style="font-size: 12px; text-transform: uppercase; letter-spacing: 2px; color: #a5b4fc; font-weight: 700;">Predicted Outcome Result</span>
+                <div style="font-size: 36px; font-weight: 900; color: #38bdf8; margin-top: 5px;">{prediction}</div>
+            </div>
+            """,
+          unsafe_allow_html=True,
+      )
+    else:
+      st.error(
+          "⚠️ Model file (`knn.pkl`) could not be loaded. Please ensure it is"
+          " uploaded to your repository."
+      )
+  except Exception as e:
+    st.error(f"❌ Error in processing input: {e}")
+
+# Footer
+st.markdown(
+    """
+    <div style="text-align: center; margin-top: 40px; font-size: 12px; color: #64748b;">
+        Crafted with Streamlit & Python • Designed for Cloud Deployment
+    </div>
+""",
+    unsafe_allow_html=True,
+)
